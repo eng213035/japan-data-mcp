@@ -330,6 +330,23 @@ export default {
       return new Response(LANDING_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
     }
 
+    if (request.method === 'GET' && url.pathname === '/robots.txt') {
+      return new Response(
+        'User-agent: *\nAllow: /\nSitemap: https://api.gachi-tokusuru.com/sitemap.xml\n',
+        { headers: { 'content-type': 'text/plain; charset=utf-8' } },
+      );
+    }
+
+    if (request.method === 'GET' && url.pathname === '/sitemap.xml') {
+      return new Response(
+        '<?xml version="1.0" encoding="UTF-8"?>\n' +
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+          '  <url><loc>https://api.gachi-tokusuru.com/</loc></url>\n' +
+          '</urlset>\n',
+        { headers: { 'content-type': 'application/xml; charset=utf-8' } },
+      );
+    }
+
     // No-auth sample response (click-to-try; fixed to Shinjuku so it isn't a free unlimited API)
     if (request.method === 'GET' && url.pathname === '/example') {
       const tool = TOOLS.find((t) => t.name === 'get_toilet_by_station');
@@ -441,6 +458,13 @@ const LANDING_HTML = `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Japan Toilet & Accessibility API / MCP</title>
+<meta name="description" content="Structured data on wheelchair-accessible & public toilets across Japan — 526 Tokyo stations (with nearest station exit) + 612 municipalities. MCP server, free tier. For AI agents, travel & accessibility apps.">
+<meta property="og:title" content="Japan Toilet & Accessibility API / MCP">
+<meta property="og:description" content="Wheelchair-accessible & public toilet data across Japan for AI agents. MCP server, free tier, live sample.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://api.gachi-tokusuru.com">
+<meta name="twitter:card" content="summary">
+<meta name="robots" content="index,follow">
 <style>
 :root{--fg:#1a1a1a;--mut:#666;--acc:#0b6;--bg:#fff;--card:#f6f8f7;--bd:#e3e8e6}
 *{box-sizing:border-box}body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--fg);background:var(--bg)}
