@@ -417,8 +417,8 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 <h2>Pricing <span class="mut">(early-access — early users are grandfathered)</span></h2>
 <table>
 <tr><th>Plan</th><th>Price</th><th>Limit</th><th></th></tr>
-<tr><td class="price">Free</td><td>$0</td><td>1,000 req / mo</td><td>MCP access — evaluate &amp; hobby projects</td></tr>
-<tr><td class="price">Pro</td><td>$19/mo</td><td>100,000 req / mo</td><td>MCP access — production use in your agent/app</td></tr>
+<tr><td class="price">Free</td><td>$0</td><td>1,000 req / mo</td><td>Try it with your agent — full MCP access</td></tr>
+<tr><td class="price">Pro</td><td>$19/mo</td><td>100,000 req / mo</td><td>Production volume — same full MCP access</td></tr>
 <tr><td class="price">Business</td><td>Contact</td><td>—</td><td>Station master (cross-operator), ridership trends &amp; bulk datasets — <i>in development</i></td></tr>
 </table>
 <p><a href="https://buy.stripe.com/00w9ATg4B5F5byV2B13Ru00" target="_blank" rel="noopener"><b>Subscribe to Pro — $19/mo →</b></a> <span class="mut">(after checkout we email your Pro key, 100K req/mo, to your Stripe email within 24h)</span></p>
