@@ -318,7 +318,8 @@ async function handleRpc(body, env) {
   return rpcError(id, -32601, `method not found: ${method}`);
 }
 
-const UPGRADE_URL = 'https://api.gachi-tokusuru.com'; // landing page with pricing + PayPal Pro link
+const UPGRADE_URL = 'https://api.gachi-tokusuru.com'; // landing page with pricing
+const PORTAL_URL = 'https://billing.stripe.com/p/login/00w9ATg4B5F5byV2B13Ru00'; // self-serve manage/cancel
 
 export default {
   async fetch(request, env) {
@@ -372,7 +373,8 @@ export default {
         + `<code class="key">${r.key}</code>`
         + '<p><b>Save it now</b> — treat it like a password. Use it as <code>Authorization: Bearer &lt;key&gt;</code> at '
         + '<code>https://api.gachi-tokusuru.com/mcp</code>.</p>'
-        + '<p class="mut">A copy is tied to your subscription; reopening this page shows the same key. '
+        + '<p class="mut">A copy is tied to your subscription; reopening this page shows the same key.</p>'
+        + `<p class="mut">Manage or cancel your subscription anytime: <a href="${PORTAL_URL}">billing portal</a>. `
         + 'Questions? contact@piachan.com</p>'), { headers: htmlHeaders });
     }
 
@@ -487,6 +489,7 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 <tr><td class="price">Business</td><td>Contact</td><td>—</td><td>Station master (cross-operator), ridership trends &amp; bulk datasets — <i>in development</i></td></tr>
 </table>
 <p><a href="https://buy.stripe.com/00w9ATg4B5F5byV2B13Ru00" target="_blank" rel="noopener"><b>Subscribe to Pro — $19/mo →</b></a> <span class="mut">(your Pro key, 100K req/mo, is shown instantly after checkout)</span></p>
+<p class="mut">Already Pro? <a href="${PORTAL_URL}" target="_blank" rel="noopener">Manage or cancel your subscription</a> anytime.</p>
 
 <h2>Get a free API key</h2>
 <p class="mut">Enter your email — your key is issued instantly on this page (1,000 req/mo, no card required).</p>
