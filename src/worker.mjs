@@ -304,7 +304,7 @@ export default {
         if (nice.length) { en.toilets = nice; en.count = nice.length; }
       }
       const payload = {
-        note: 'Live sample of get_toilet_by_station("Shinjuku"). Get a free key at https://api.gachi-tokusuru.com to query any station via MCP.',
+        note: 'Live sample of get_toilet_by_station("Shinjuku"). English-first; *_ja fields carry the original Japanese (use whichever you need). Get a free key at https://api.gachi-tokusuru.com to query any station via MCP.',
         ...(en || { error: 'sample unavailable' }),
         attribution: tool.attribution,
       };
