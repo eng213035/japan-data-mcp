@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: '306fb71',
-  built: '2026-07-05T05:15:00Z',
-  build: 'hazard-cache-license-filter',
+  commit: 'dd60beb',
+  built: '2026-07-05T05:24:00Z',
+  build: 'lp-hazard-423-stations',
   pricing_tiers: 4,
 };
 
@@ -1121,7 +1121,7 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 <li><b>Ridership 2000–2025 (open dataset)</b> — 292 stations, annual series through the COVID collapse and recovery</li>
 <!-- Station Hazard is a LIVE API relay (REST GET /v1/stations/{id}/hazard + MCP get_station_hazard):
      house policy is to relay official MLIT hazard values as-is — no derived scores, no raw redistribution. -->
-<li><b>Station Hazard API (live)</b> — official flood, liquefaction &amp; storm-surge categories from MLIT, relayed live per station (REST + MCP); landslide &amp; tsunami link out to the official maps (license-restricted)</li>
+<li><b>Station Hazard API (live)</b> — official flood, liquefaction &amp; storm-surge categories from MLIT for <b>423 stations</b>, relayed live per station (REST + MCP); landslide &amp; tsunami link out to the official maps (license-restricted)</li>
 <li><b>More APIs launching on this data</b> — All Access subscribers get every new one automatically</li>
 </ul>
 
