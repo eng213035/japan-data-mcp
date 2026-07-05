@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'b184eaf',
-  built: '2026-07-05T04:22:35Z',
-  build: 'rebrand-gachi-data-api',
+  commit: 'fb7aa8c',
+  built: '2026-07-05T04:37:35Z',
+  build: 'hazard-relay-endpoint',
   pricing_tiers: 4,
 };
 
@@ -290,6 +290,120 @@ function toEnglishNearbyToilet(t) {
   };
 }
 
+// ---- Station hazard (live relay to MLIT 不動産情報ライブラリ / reinfolib) ------------
+// Per-request passthrough: resolve station_id -> coords (sta:<id> in KV, seeded from the
+// Japan Station Master), query the official MLIT reinfolib hazard layers AT THAT POINT, and
+// return the OFFICIAL values/categories verbatim. No derived score (house policy: deliver
+// official values as-is). Raw layer data is never stored or bulk-redistributed — every
+// response is a fresh official lookup, so this is API usage, not dataset redistribution.
+const REINFOLIB_BASE = 'https://www.reinfolib.mlit.go.jp/ex-api/external';
+const HAZARD_ATTRIBUTION = {
+  source: '国土交通省 不動産情報ライブラリ (MLIT Real Estate Information Library)',
+  url: 'https://www.reinfolib.mlit.go.jp/',
+  note: 'Official hazard-map values relayed as-is per request (point lookup by gachi-tokusuru.com). Not a government-created dataset — do not present as such.',
+  terms: 'https://www.reinfolib.mlit.go.jp/help/termsOfUse/',
+};
+const HAZARD_DISCLAIMER =
+  'For research & analytics only. This is NOT a substitute for official hazard maps and must NOT be the sole basis for safety or evacuation decisions. Always consult the government/municipal hazard maps at https://disaportal.gsi.go.jp/ . 防災・避難の判断には必ず自治体の公式ハザードマップをご確認ください。';
+// Official 想定最大規模 inundation-depth ranks (国土数値情報 A31a_205).
+const FLOOD_RANK_JA = {
+  1: '0m以上0.5m未満', 2: '0.5m以上3.0m未満', 3: '3.0m以上5.0m未満',
+  4: '5.0m以上10.0m未満', 5: '10.0m以上20.0m未満', 6: '20.0m以上',
+};
+const FLOOD_RANK_EN = {
+  1: '< 0.5 m', 2: '0.5–3.0 m', 3: '3.0–5.0 m', 4: '5.0–10.0 m', 5: '10.0–20.0 m', 6: '≥ 20.0 m',
+};
+
+function hazTile(lat, lon, z) {
+  const x = Math.floor(((lon + 180) / 360) * 2 ** z);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * 2 ** z);
+  return { x, y };
+}
+function ringContains(pt, ring) {
+  let inside = false;
+  const [x, y] = pt;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function polyContains(pt, geom) {
+  if (!geom) return false;
+  if (geom.type === 'Polygon') {
+    return geom.coordinates.length > 0 && ringContains(pt, geom.coordinates[0]) && !geom.coordinates.slice(1).some((h) => ringContains(pt, h));
+  }
+  if (geom.type === 'MultiPolygon') {
+    return geom.coordinates.some((poly) => ringContains(pt, poly[0]) && !poly.slice(1).some((h) => ringContains(pt, h)));
+  }
+  return false;
+}
+async function reinfoLayer(env, code, x, y) {
+  const url = `${REINFOLIB_BASE}/${code}?response_format=geojson&z=14&x=${x}&y=${y}`;
+  const res = await fetch(url, {
+    headers: { 'Ocp-Apim-Subscription-Key': env.REINFOLIB_API_KEY },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`reinfolib ${code} HTTP ${res.status}`);
+  return res.json();
+}
+async function stationHazard(env, coords) {
+  const pt = [coords.lng, coords.lat];
+  const { x, y } = hazTile(coords.lat, coords.lng, 14);
+  const [flood, liq, landslide, surge, tsunami] = await Promise.all([
+    reinfoLayer(env, 'XKT026', x, y).catch(() => null),
+    reinfoLayer(env, 'XKT025', x, y).catch(() => null),
+    reinfoLayer(env, 'XKT011', x, y).catch(() => null),
+    reinfoLayer(env, 'XKT027', x, y).catch(() => null),
+    reinfoLayer(env, 'XKT028', x, y).catch(() => null),
+  ]);
+
+  // Flood: keep only inundation polygons that actually contain the station point (point precision,
+  // not tile-max), then report the deepest official rank + the rivers those polygons belong to.
+  const floodHits = (flood?.features || []).filter((f) => polyContains(pt, f.geometry));
+  const floodRank = floodHits.length ? Math.max(0, ...floodHits.map((f) => Number(f.properties?.A31a_205) || 0)) : 0;
+  const rivers = [...new Set(floodHits.map((f) => f.properties?.A31a_202).filter(Boolean))];
+
+  // Liquefaction/landform: the landform polygon containing the point (official classification + note).
+  const liqHit = (liq?.features || []).find((f) => polyContains(pt, f.geometry));
+
+  const present = (d) => !!(d && (d.features || []).length > 0);
+
+  return {
+    flood: {
+      inundation_expected: floodRank > 0,
+      depth_rank: floodRank || null,
+      depth_category: floodRank ? FLOOD_RANK_EN[floodRank] : 'none',
+      depth_category_ja: floodRank ? FLOOD_RANK_JA[floodRank] : 'なし',
+      rivers: rivers.length ? rivers : null,
+      source: '国土交通省 不動産情報ライブラリ XKT026 (洪水浸水想定区域・想定最大規模)',
+    },
+    liquefaction: liqHit
+      ? {
+          landform_ja: liqHit.properties?.topographic_classification_name_ja ?? null,
+          tendency_level: Number(liqHit.properties?.liquefaction_tendency_level) || null,
+          tendency_note_ja: liqHit.properties?.note ?? null,
+          source: '国土交通省 不動産情報ライブラリ XKT025 (地形分類による液状化傾向図)',
+        }
+      : { landform_ja: null, tendency_level: null, tendency_note_ja: null, note: 'no data at this point', source: '国土交通省 不動産情報ライブラリ XKT025 (地形分類による液状化傾向図)' },
+    landslide: {
+      warning_area_present: present(landslide),
+      source: '国土交通省 不動産情報ライブラリ XKT011 (土砂災害警戒区域)',
+      commercial_use: 'restricted_in_some_prefectures — verify the source terms before commercial redistribution',
+    },
+    storm_surge: {
+      inundation_area_present: present(surge),
+      source: '国土交通省 不動産情報ライブラリ XKT027 (高潮浸水想定区域)',
+    },
+    tsunami: {
+      inundation_area_present: present(tsunami),
+      source: '国土交通省 不動産情報ライブラリ XKT028 (津波浸水想定)',
+      commercial_use: 'restricted_in_some_prefectures — verify the source terms before commercial redistribution',
+    },
+  };
+}
+
 function rpcResult(id, result) {
   return { jsonrpc: '2.0', id, result };
 }
@@ -514,6 +628,36 @@ export default {
     }
 
     // ---- REST v1 (thin layer over the same internal functions + i18n as MCP) ----
+
+    // Live hazard relay: official MLIT hazard values/categories at a station's location.
+    // No derived score (house policy). station_id comes from the Japan Station Master (st_00001).
+    const hazMatch = url.pathname.match(/^\/v1\/stations\/([^/]+)\/hazard$/);
+    if (request.method === 'GET' && hazMatch) {
+      const gate = await restAuthAndMeter(request, env);
+      if (gate.error) return gate.error;
+      if (!env.REINFOLIB_API_KEY) return restError('unavailable', 'Hazard source is not configured.', 503);
+      const stationId = decodeURIComponent(hazMatch[1]);
+      const rec = await env.TOILET_KV.get(`sta:${stationId}`, 'json');
+      if (!rec) return restError('not_found', `Unknown station_id "${stationId}". IDs come from the Japan Station Master (e.g. st_00001).`, 404);
+      if (typeof rec.lat !== 'number' || typeof rec.lng !== 'number') {
+        return restJson({
+          station: { id: stationId, name: rec.n || null, name_ja: rec.nj || null },
+          hazard: null,
+          note: 'This station has no coordinates in the Japan Station Master, so a point hazard lookup is not available.',
+          attribution: HAZARD_ATTRIBUTION,
+        });
+      }
+      let hazard;
+      try { hazard = await stationHazard(env, { lat: rec.lat, lng: rec.lng }); }
+      catch (e) { return restError('upstream_error', `Hazard source lookup failed: ${e.message}`, 502); }
+      return restJson({
+        station: { id: stationId, name: rec.n || null, name_ja: rec.nj || null, lat: rec.lat, lng: rec.lng, pref: rec.pref || null },
+        hazard,
+        disclaimer: HAZARD_DISCLAIMER,
+        attribution: HAZARD_ATTRIBUTION,
+      });
+    }
+
     if (request.method === 'GET' && url.pathname === '/v1/station-toilets/search') {
       const gate = await restAuthAndMeter(request, env);
       if (gate.error) return gate.error;
@@ -763,6 +907,28 @@ paths:
         "400": { description: Missing/invalid lat or lng }
         "401": { description: Missing/invalid API key }
         "429": { description: Monthly quota reached (Retry-After header) }
+  /v1/stations/{id}/hazard:
+    get:
+      summary: Official hazard info at a station (live relay to MLIT reinfolib)
+      description: >
+        Returns the official MLIT 不動産情報ライブラリ hazard values/categories at the
+        station's location — flood inundation depth rank, liquefaction/landform, and
+        landslide / storm-surge / tsunami inundation-area presence — relayed verbatim
+        (no derived score). station_id comes from the Japan Station Master (e.g. st_00001);
+        327 of 425 stations have coordinates. NOT a substitute for official hazard maps.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: Station master station_id (e.g. st_00001).
+      responses:
+        "200": { description: Official hazard values at the station (or hazard=null if the station has no coordinates) }
+        "401": { description: Missing/invalid API key }
+        "404": { description: Unknown station_id }
+        "429": { description: Monthly quota reached (Retry-After header) }
+        "502": { description: Upstream hazard source lookup failed }
+        "503": { description: Hazard source not configured }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -784,6 +950,12 @@ Auth header on every call: <code>Authorization: Bearer &lt;key&gt;</code>. MCP a
 <h2>Public toilets near a coordinate</h2>
 <pre>curl "https://api.gachi-tokusuru.com/v1/toilets/nearby?lat=35.6896&lng=139.7006&radius=800&wheelchair=true" \\
   -H "Authorization: Bearer YOUR_API_KEY"</pre>
+<h2>Official hazard info at a station <span style="font-weight:400;font-size:14px;color:#666">(live relay to MLIT 不動産情報ライブラリ)</span></h2>
+<p>Official flood / liquefaction / landslide / storm-surge / tsunami categories at a station's
+location, relayed as-is (no derived score). <code>id</code> is a Japan Station Master
+<code>station_id</code> (e.g. <code>st_00001</code>). Not a substitute for official hazard maps.</p>
+<pre>curl "https://api.gachi-tokusuru.com/v1/stations/st_00001/hazard" \\
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
 <p>Errors are JSON: <code>{"error":"&lt;code&gt;","message":"...","docs":"https://api.gachi-tokusuru.com/docs"}</code>.
 Codes: 400 bad_request, 401 unauthorized, 404 not_found, 429 rate_limit_exceeded (with <code>Retry-After</code>).</p>
 <p><a href="/">← Back to home &amp; pricing</a></p>
@@ -799,6 +971,7 @@ const LLMS_TXT = `# Gachi Data API — Japan Station & Accessibility Data (API �
 - MCP endpoint: https://api.gachi-tokusuru.com/mcp (JSON-RPC; tools: get_toilet_by_station, get_public_toilet_by_city)
 - REST GET /v1/station-toilets/search?station=Shinjuku  (station name English or Japanese)
 - REST GET /v1/toilets/nearby?lat=&lng=&radius=&wheelchair=&ostomate=&diaper=  (radius metres, max 2000)
+- REST GET /v1/stations/{station_id}/hazard  (official MLIT hazard categories at a station, relayed live; station_id e.g. st_00001)
 - Auth: Authorization: Bearer <key>. Free keys: https://api.gachi-tokusuru.com
 - OpenAPI: https://api.gachi-tokusuru.com/openapi.yaml
 - Pricing: https://api.gachi-tokusuru.com (Free 1k, Pro $19/100k, All Access $49/200k, Business $149/500k)
@@ -862,8 +1035,10 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 <li><b>Accessibility API (live)</b> — 526 Tokyo stations with floor, gender, equipment &amp; <code>nearest_exit</code>; 612 municipalities of public toilets nationwide</li>
 <li><b>Station Master (open dataset)</b> — 425 stations, entity-resolved across operators (Shinjuku = 6 companies, 1 ID), English names</li>
 <li><b>Ridership 2000–2025 (open dataset)</b> — 292 stations, annual series through the COVID collapse and recovery</li>
-<!-- TODO(Part B): when Station Hazard is published, drop "(open dataset — in preparation)" → "(open dataset)" and append its Zenodo DOI link, like the other datasets. See Part A-3 of the launch spec. -->
-<li><b>Station Hazard (open dataset — in preparation)</b> — flood, earthquake &amp; liquefaction risk, joined to the same station IDs</li>
+<!-- Station Hazard is a LIVE API relay (GET /v1/stations/{id}/hazard), not a static dataset:
+     house policy is to relay official MLIT hazard values as-is (no derived scores, no raw
+     redistribution). When announced, change "(launching soon)" → "(live)". -->
+<li><b>Station Hazard API (launching soon)</b> — official flood, liquefaction, landslide, storm-surge &amp; tsunami categories from MLIT, relayed live per station ID</li>
 <li><b>More APIs launching on this data</b> — All Access subscribers get every new one automatically</li>
 </ul>
 
