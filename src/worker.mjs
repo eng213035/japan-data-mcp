@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'dd60beb',
-  built: '2026-07-05T05:24:00Z',
-  build: 'lp-hazard-423-stations',
+  commit: 'd8ec832',
+  built: '2026-07-05T05:30:00Z',
+  build: 'lp-roadmap-section',
   pricing_tiers: 4,
 };
 
@@ -1127,6 +1127,14 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 
 <h2>Built with this data</h2>
 <p><a href="https://toilet.gachi-tokusuru.com/en" target="_blank" rel="noopener">toilet.gachi-tokusuru.com</a> — a live site running entirely on this dataset. Your agent can do the same in one call.</p>
+
+<h2>Roadmap</h2>
+<ul>
+<li><b>Nationwide station coverage</b> — expanding the station master beyond Greater Tokyo (hazard &amp; ridership grow with it)</li>
+<li><b>Akiya Intelligence</b> — municipality vacancy statistics (1998–2023) + a one-call context API: vacancy × ridership decline × hazard</li>
+<li><b>Seismic risk</b> — earthquake shaking categories per station</li>
+</ul>
+<p class="mut">No dates promised — we ship when it's right. All Access &amp; Business subscribers get every new API automatically.</p>
 
 <h2>Pricing <span class="mut">(early-access — early users are grandfathered)</span></h2>
 <table>
