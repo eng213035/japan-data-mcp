@@ -68,9 +68,12 @@ Paid plans are self-serve: after Stripe checkout the customer is redirected to `
 ## Licensing (two layers — read carefully)
 
 - **Code** in this repository: MIT (see [LICENSE](LICENSE)). Applies to the server code only.
-- **Data** returned by the API is **NOT MIT.** It is derived from:
-  - Tokyo Metropolitan Government, Bureau of Social Welfare — accessible toilet dataset (**CC BY 4.0**)
-  - BODIK nationwide public-toilet open data (**CC BY 4.0** or equivalent municipal terms)
-  - English station names via ODPT (Public Transportation Open Data Center)
-- `nearest_exit` is an original derived value by gachi-tokusuru.com.
+- **Data** returned by the API is **NOT MIT.** Each value carries its source in the response `attribution`. It is derived from:
+  - Accessible & public toilets — Tokyo Metropolitan Government, Bureau of Social Welfare & BODIK municipal open data (**CC BY 4.0**): https://portal.data.metro.tokyo.lg.jp/ · https://www.bodik.jp/
+  - Station names & train service status — ODPT, Public Transportation Open Data Center (**CC BY 4.0**): https://developer.odpt.org/
+  - Hazard categories, future population, land price — MLIT 不動産情報ライブラリ (Real Estate Information Library), official values relayed as-is per request (not a government-created dataset): https://www.reinfolib.mlit.go.jp/
+  - River flood forecasts & landslide alerts — JMA (Japan Meteorological Agency, 気象庁), relayed as published, not warnings issued by this service: https://www.jma.go.jp/bosai/
+  - Housing vacancy & municipality codes — Statistics Bureau of Japan (住宅・土地統計調査) via e-Stat & MIC (総務省): https://www.stat.go.jp/data/jyutaku/
+  - Nationwide stations & bus stops — MLIT 国土数値情報 N02/P11; English station names partly via Wikidata (**CC0**): https://nlftp.mlit.go.jp/ksj/ · https://www.wikidata.org/
+- Derived by gachi-tokusuru.com (distinct from the official values above): `nearest_exit`, `nearest_station_km`, and bus-stop counts are computed via spatial join.
 - Attribution is returned in every API response. Timeliness, accuracy and completeness are not guaranteed.
