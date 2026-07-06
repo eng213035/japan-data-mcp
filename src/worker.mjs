@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'lp-v5-final-polish',
-  built: '2026-07-05T16:00:00Z',
-  build: 'lp-v5-enterprise-priorart-attribution',
+  commit: 'lp-v5-kaggle-gachidata',
+  built: '2026-07-05T16:40:00Z',
+  build: 'lp-v5-kaggle-url-swap',
   pricing_tiers: 5,
 };
 
@@ -787,7 +787,7 @@ const DATASETS = {
   github: 'https://github.com/eng213035/gachi-open-datasets',
   zenodo_doi: '10.5281/zenodo.21199500',
   zenodo_url: 'https://doi.org/10.5281/zenodo.21199500',
-  kaggle: 'https://www.kaggle.com/datasets/takufujii/japan-station-master-and-ridership-2000-2025-tokyo',
+  kaggle: 'https://www.kaggle.com/datasets/gachidata/japan-stations-ridership-and-akiya-2003-2025',
 };
 
 const CORS = {
@@ -1798,7 +1798,7 @@ const LLMS_TXT = `# Gachi Data API — Japan Station & Accessibility Data (API �
 - Municipality Context API (live): vacancy × ridership × hazard × land price × livability, per municipality or station — official values only, no scores
 - Zenodo DOI (concept, always latest): 10.5281/zenodo.21199500  (https://doi.org/10.5281/zenodo.21199500)
 - GitHub: https://github.com/eng213035/gachi-open-datasets
-- Kaggle: https://www.kaggle.com/datasets/takufujii/japan-station-master-and-ridership-2000-2025-tokyo
+- Kaggle: https://www.kaggle.com/datasets/gachidata/japan-stations-ridership-and-akiya-2003-2025
 
 ## License & attribution
 - Data: Tokyo Metropolitan Government (Bureau of Social Welfare) & BODIK municipal open data, CC BY 4.0.
