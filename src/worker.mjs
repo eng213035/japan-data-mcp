@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'oauth-2.1-remote-mcp',
-  built: '2026-07-06T11:30:00Z',
-  build: 'oauth-discovery-dcr-pkce-token',
+  commit: 'oauth-confidential-client',
+  built: '2026-07-06T12:10:00Z',
+  build: 'oauth-add-client-secret-basic',
   pricing_tiers: 5,
 };
 
@@ -643,7 +643,7 @@ function protectedResourceMetadata() {
   return { resource: OAUTH_RESOURCE, authorization_servers: [OAUTH_ISSUER], scopes_supported: [OAUTH_SCOPE], bearer_methods_supported: ['header'], resource_name: 'Gachi Data API', resource_documentation: `${OAUTH_ISSUER}/docs` };
 }
 function authServerMetadata() {
-  return { issuer: OAUTH_ISSUER, authorization_endpoint: `${OAUTH_ISSUER}/authorize`, token_endpoint: `${OAUTH_ISSUER}/token`, registration_endpoint: `${OAUTH_ISSUER}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'], scopes_supported: [OAUTH_SCOPE] };
+  return { issuer: OAUTH_ISSUER, authorization_endpoint: `${OAUTH_ISSUER}/authorize`, token_endpoint: `${OAUTH_ISSUER}/token`, registration_endpoint: `${OAUTH_ISSUER}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'], scopes_supported: [OAUTH_SCOPE] };
 }
 function oauthTokenErr(error, desc) {
   return Response.json({ error, error_description: desc }, { status: 400, headers: { ...CORS, 'cache-control': 'no-store' } });
@@ -1174,11 +1174,13 @@ export default {
       let b; try { b = await request.json(); } catch { b = {}; }
       const redirect_uris = Array.isArray(b?.redirect_uris) ? b.redirect_uris.filter((x) => typeof x === 'string').slice(0, 10) : [];
       const client_id = randToken('oc_');
-      await env.TOILET_KV.put(`oauthclient:${client_id}`, JSON.stringify({ redirect_uris, client_name: String(b?.client_name || '').slice(0, 120), created: new Date().toISOString() }), { expirationTtl: 34560000 });
+      const client_secret = randToken('cs_'); // issued for confidential clients (e.g. claude.ai web); PKCE-only public clients may ignore it
+      const authMethod = (b?.token_endpoint_auth_method === 'none') ? 'none' : 'client_secret_post';
+      await env.TOILET_KV.put(`oauthclient:${client_id}`, JSON.stringify({ redirect_uris, client_secret, client_name: String(b?.client_name || '').slice(0, 120), created: new Date().toISOString() }), { expirationTtl: 34560000 });
       return Response.json({
-        client_id, client_id_issued_at: Math.floor(Date.now() / 1000), redirect_uris,
+        client_id, client_secret, client_id_issued_at: Math.floor(Date.now() / 1000), client_secret_expires_at: 0, redirect_uris,
         grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
-        token_endpoint_auth_method: 'none', client_name: String(b?.client_name || '') || undefined,
+        token_endpoint_auth_method: authMethod, client_name: String(b?.client_name || '') || undefined,
       }, { status: 201, headers: { ...CORS, 'cache-control': 'no-store' } });
     }
     // Authorization endpoint (PKCE S256 mandatory; explicit-consent via ?approve=1).
@@ -1204,13 +1206,23 @@ export default {
     if (request.method === 'POST' && url.pathname === '/token') {
       const form = new URLSearchParams(await request.text());
       const grant = form.get('grant_type') || '';
+      // Client credentials may arrive via form (client_secret_post) or HTTP Basic (client_secret_basic).
+      let cid = form.get('client_id') || '';
+      let csecret = form.get('client_secret') || '';
+      const basic = request.headers.get('authorization') || '';
+      if (basic.startsWith('Basic ')) {
+        try { const [u, p] = atob(basic.slice(6)).split(':'); cid = cid || decodeURIComponent(u || ''); csecret = csecret || decodeURIComponent(p || ''); } catch {}
+      }
       if (grant === 'authorization_code') {
         const code = form.get('code') || '';
         const rec = code ? await env.TOILET_KV.get(`oauthcode:${code}`, 'json') : null;
         if (!rec) return oauthTokenErr('invalid_grant', 'Authorization code invalid or expired.');
         await env.TOILET_KV.delete(`oauthcode:${code}`); // single-use
-        if (rec.client_id !== (form.get('client_id') || '')) return oauthTokenErr('invalid_grant', 'client_id mismatch.');
+        if (rec.client_id !== cid) return oauthTokenErr('invalid_grant', 'client_id mismatch.');
         if (rec.redirect_uri !== (form.get('redirect_uri') || '')) return oauthTokenErr('invalid_grant', 'redirect_uri mismatch.');
+        // Confidential client: if a secret is presented, it must match the registered one (claude.ai web).
+        const client = await env.TOILET_KV.get(`oauthclient:${cid}`, 'json');
+        if (csecret && (!client || client.client_secret !== csecret)) return oauthTokenErr('invalid_client', 'Invalid client_secret.');
         const verifier = form.get('code_verifier') || '';
         if (!verifier || (await sha256b64url(verifier)) !== rec.code_challenge) return oauthTokenErr('invalid_grant', 'PKCE verification failed.');
         const accessToken = await issueFreeKey(env, 'oauth:' + (rec.client_id || 'connector'));
