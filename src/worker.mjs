@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'docs-auth-boundary-box',
-  built: '2026-07-06T09:40:00Z',
-  build: 'docs-do-i-need-a-key-table',
+  commit: 'station-context-name-clearer-errors',
+  built: '2026-07-06T10:35:00Z',
+  build: 'get-station-context-name-or-id-v2',
   pricing_tiers: 5,
 };
 
@@ -52,14 +52,15 @@ const TOOLS = [
   {
     name: 'get_station_context',
     description:
-      "Same official municipality data as get_municipality_context, resolved from a station: pass a Japan Station Master station_id (e.g. st_00001) and it returns the context for that station's municipality. Official values only — no scores.",
+      "Same official municipality data as get_municipality_context, resolved from a station: pass a station name (Shinjuku / 新宿 / Musashi-Kosugi) or a Japan Station Master station_id (e.g. st_00001), and it returns the context for that station's municipality. Official values only — no scores.",
     inputSchema: {
       type: 'object',
       properties: {
-        station_id: { type: 'string', description: 'Japan Station Master station_id (e.g. st_00001).' },
+        station_name: { type: 'string', description: 'Station name in English/romaji (Shinjuku) or Japanese (新宿). Provide this or station_id.' },
+        station_id: { type: 'string', description: 'Japan Station Master station_id (e.g. st_00001). Alternative to station_name.' },
         fields: { type: 'string', description: 'Optional comma-separated subset: vacancy,ridership,population,hazard,land_price,livability.' },
       },
-      required: ['station_id'],
+      required: [],
     },
   },
   {
@@ -794,7 +795,7 @@ async function handleRpc(body, env) {
       const a = params?.arguments || {};
       const fields = parseCtxFields(a.fields);
       const payload = tool.name === 'get_station_context'
-        ? await stationContextPayload(env, (a.station_id || '').trim(), fields)
+        ? await stationContextPayload(env, (a.station_id || a.station_name || '').trim(), fields)
         : await municipalityContextByNameOrCode(env, (a.name_or_code || '').trim(), fields);
       return rpcResult(id, { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] });
     }
@@ -1078,10 +1079,18 @@ async function municipalityContextByNameOrCode(env, q, fields) {
   if (!code) return { error: `No municipality found for "${s}". Try a 5-digit code (13104) or an exact name (Shinjuku-ku / 新宿区).` };
   return municipalityContextPayload(env, code, fields);
 }
-async function stationContextPayload(env, stationId, fields) {
-  const sid = (stationId || '').trim();
+async function stationContextPayload(env, stationRef, fields) {
+  const ref = (stationRef || '').trim();
+  let sid = ref;
+  let resolvedName = null;
+  // Accept a station name (Japanese 新宿 or romaji Shinjuku) as well as an st_ id.
+  if (sid && !/^st_/i.test(sid)) {
+    const rec = await resolveStationByName(env, sid);
+    if (rec && rec.id) { sid = rec.id; resolvedName = rec.n || rec.nj || null; }
+    else return { error: `No station found for "${ref}". Pass a station name (Shinjuku / 新宿) or a Japan Station Master station_id (e.g. st_00001).` };
+  }
   const code = sid ? await env.TOILET_KV.get(`stamuni:${sid}`) : null;
-  if (!code) return { error: `Unknown station_id "${sid}" (Japan Station Master, e.g. st_00001), or it has no coordinates to resolve a municipality.` };
+  if (!code) return { error: `Resolved station "${resolvedName || sid}" (${sid}), but no municipality context is mapped for it yet. Try a nearby major station, or query the municipality directly with get_municipality_context.` };
   const sta = await env.TOILET_KV.get(`sta:${sid}`, 'json');
   const ctx = await municipalityContextPayload(env, code, fields);
   if (!ctx.error) ctx.resolved_via_station = { station_id: sid, name: sta?.n || null, name_ja: sta?.nj || null };
@@ -1552,9 +1561,9 @@ paths:
         "429": { description: Free daily limit or monthly quota reached }
   /v1/stations/{id}/context:
     get:
-      summary: Same municipality context, resolved from a station_id
+      summary: Same municipality context, resolved from a station (id or name)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string }, description: Station master station_id (e.g. st_00001). }
+        - { name: id, in: path, required: true, schema: { type: string }, description: "Station master station_id (e.g. st_00001) OR a station name (Shinjuku / 新宿)." }
         - { name: fields, in: query, required: false, schema: { type: string }, description: "Comma-separated subset (see /v1/municipalities/{code}/context)." }
       responses:
         "200": { description: Context for the station's municipality }
