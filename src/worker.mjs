@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'oauth-confidential-client',
-  built: '2026-07-06T12:10:00Z',
-  build: 'oauth-add-client-secret-basic',
+  commit: 'mint-rate-limit',
+  built: '2026-07-06T12:40:00Z',
+  build: 'per-ip-daily-cap-on-key-minting',
   pricing_tiers: 5,
 };
 
@@ -615,6 +615,24 @@ async function issueFreeKey(env, email) {
   return token;
 }
 
+// Approximate per-IP + global daily cap on free-key minting (abuse backstop against mass automated
+// key creation). KV is eventually consistent → soft limit, not a hard gate, but enough to stop
+// scripted minting. Applied ONLY at human-facing entry points (/keys, /authorize approve) where
+// cf-connecting-ip is the real user — NOT /token or /register (called by claude.ai's shared backend IPs).
+async function mintRateLimit(env, request, perIp = 20, globalCap = 1000) {
+  const ip = request.headers.get('cf-connecting-ip') || 'noip';
+  const day = new Date().toISOString().slice(0, 10);
+  const ipK = `mint:${ip}:${day}`;
+  const ipN = parseInt((await env.TOILET_KV.get(ipK)) || '0', 10);
+  if (ipN >= perIp) return { ok: false, scope: 'ip' };
+  const gK = `mint:_global:${day}`;
+  const gN = parseInt((await env.TOILET_KV.get(gK)) || '0', 10);
+  if (gN >= globalCap) return { ok: false, scope: 'global' };
+  await env.TOILET_KV.put(ipK, String(ipN + 1), { expirationTtl: 172800 });
+  await env.TOILET_KV.put(gK, String(gN + 1), { expirationTtl: 172800 });
+  return { ok: true };
+}
+
 // ---- OAuth 2.1 (MCP remote auth for claude.ai web / Desktop connectors) ------
 // Same-origin authorization server + resource server. Access tokens ARE free keys
 // (stored as key:<token>), so resolveAuth + metering are reused unchanged. PKCE S256
@@ -1195,6 +1213,8 @@ export default {
       const redirect_uri = q.get('redirect_uri') || '';
       if (!oauthRedirectAllowed(redirect_uri, client.redirect_uris || [])) return oauthErrPage('invalid_request', 'redirect_uri is not registered for this client.');
       if (q.get('approve') !== '1') return oauthConsentPage(url);
+      const rl = await mintRateLimit(env, request);
+      if (!rl.ok) return oauthErrPage('temporarily_unavailable', 'Too many connections from your network today. Please try again tomorrow.');
       const code = randToken('ac_');
       await env.TOILET_KV.put(`oauthcode:${code}`, JSON.stringify({ client_id, redirect_uri, code_challenge: cc, scope: q.get('scope') || OAUTH_SCOPE, resource: q.get('resource') || OAUTH_RESOURCE, created: Date.now() }), { expirationTtl: 600 });
       const back = new URL(redirect_uri);
@@ -1548,6 +1568,8 @@ export default {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
         return Response.json({ error: 'valid email required' }, { status: 400 });
       }
+      const rl = await mintRateLimit(env, request);
+      if (!rl.ok) return Response.json({ error: 'rate_limited', message: 'Too many free keys created from your network today. Try again tomorrow, or contact us for higher volume.' }, { status: 429, headers: { 'retry-after': '3600', ...CORS } });
       const token = await issueFreeKey(env, email);
       return Response.json({ api_key: token, plan: 'free', monthly_limit: PLAN_LIMITS.free });
     }
