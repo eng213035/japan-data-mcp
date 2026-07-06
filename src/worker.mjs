@@ -6,9 +6,9 @@
 
 // Bumped on every deploy so /__version proves which build a given request hit.
 const BUILD_VERSION = {
-  commit: 'live-sample-two-layer-tables',
-  built: '2026-07-06T09:10:00Z',
-  build: 'live-sample-html-tables-plus-raw-json',
+  commit: 'docs-auth-boundary-box',
+  built: '2026-07-06T09:40:00Z',
+  build: 'docs-do-i-need-a-key-table',
   pricing_tiers: 5,
 };
 
@@ -1664,8 +1664,34 @@ const DOCS_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 code,pre{font-family:ui-monospace,Menlo,monospace}pre{background:#f6f8f7;border:1px solid #e3e8e6;border-radius:8px;padding:14px;overflow-x:auto;font-size:13px}
 a{color:#0b6}h2{margin-top:32px}</style></head><body>
 <h1>Gachi Data API — Japan Station &amp; Accessibility Data — REST v1</h1>
-<p>Machine-readable spec: <a href="/openapi.yaml">/openapi.yaml</a>. Get a free key at <a href="/">the homepage</a>.
-Auth header on every call: <code>Authorization: Bearer &lt;key&gt;</code>. MCP and REST share one monthly quota per key.</p>
+<p>Machine-readable spec: <a href="/openapi.yaml">/openapi.yaml</a>. Get a free key at <a href="/">the homepage</a>. MCP and REST share one monthly quota per key.</p>
+
+<h2 id="auth">Do I need a key? <span style="font-weight:400;font-size:14px;color:#666">(read this first)</span></h2>
+<table style="border-collapse:collapse;width:100%;font-size:14px;margin:8px 0">
+<tr style="border-bottom:2px solid #e3e8e6">
+  <th style="text-align:left;padding:8px 8px;width:50%">✅ No key — try right now</th>
+  <th style="text-align:left;padding:8px 8px;border-left:1px solid #e3e8e6">🔑 Free key required</th>
+</tr>
+<tr style="vertical-align:top">
+  <td style="padding:8px 8px">Fixed live samples, no setup:<br>
+    <code>GET /example</code><br>
+    <code>GET /example/train-status</code><br>
+    <code>GET /example/alerts</code><br>
+    MCP <code>initialize</code> / <code>tools/list</code></td>
+  <td style="padding:8px 8px;border-left:1px solid #e3e8e6">Every real query (any station / city):<br>
+    all <code>/v1/*</code> — toilets · hazard · context · alerts · lines<br>
+    MCP <code>tools/call</code><br>
+    <span style="color:#666">1,000 req/mo free — instant key at the <a href="/">homepage</a></span></td>
+</tr>
+</table>
+<pre># No key — canned sample, real JSON:
+curl https://api.gachi-tokusuru.com/example
+
+# Free key — query any station (get one at the homepage):
+curl "https://api.gachi-tokusuru.com/v1/station-toilets/search?station=Shinjuku" \\
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+<p style="font-size:14px;color:#666">Rule of thumb: <code>/example*</code> = no key (fixed samples) · <code>/v1/*</code> = free key (query anything). Auth header on keyed calls: <code>Authorization: Bearer &lt;key&gt;</code>. A missing/invalid key on a <code>/v1/*</code> route returns <code>401</code> with a link to get one.</p>
+
 <h2>Station toilets (English or Japanese station name)</h2>
 <pre>curl "https://api.gachi-tokusuru.com/v1/station-toilets/search?station=Shinjuku" \\
   -H "Authorization: Bearer YOUR_API_KEY"</pre>
@@ -1915,7 +1941,7 @@ footer{margin-top:48px;color:var(--mut);font-size:13px;border-top:1px solid var(
 </div>
 <p class="mut">Official MLIT categories, relayed as-is — no derived score. Not a substitute for official hazard maps.</p>
 
-<p><a href="/example" target="_blank" rel="noopener"><b>▼ See the raw JSON — this exact response, live</b></a> — no key needed. <span class="mut">(hazard JSON needs a free key — see <a href="/docs#data-stories">/docs</a>)</span></p>
+<p><a href="/example" target="_blank" rel="noopener"><b>▼ See the raw JSON — this exact response, live</b></a> — no key needed. <span class="mut">(hazard JSON needs a free key — see <a href="/docs#auth">/docs</a>)</span></p>
 <p><a href="/example/train-status" target="_blank" rel="noopener"><b>▶ Train status right now</b></a> — live JSON, no key needed.</p>
 <p><a href="/example/alerts" target="_blank" rel="noopener"><b>▶ Active flood &amp; landslide alerts right now</b></a> — usually zero, and that's honest.</p>
 
